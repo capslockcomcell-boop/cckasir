@@ -192,13 +192,18 @@ def show():
     if not df_order_f.empty:
         # ganti Berat (Kg) di tabel dengan display berkomanya
         df_table = df_order_f.copy()
+        # Pakai BeratDisplay hanya untuk tampilan (jangan ubah kolom asli)
         if "BeratDisplay" in df_table.columns:
-            df_table["Berat (Kg)"] = df_table["BeratDisplay"]
+            df_table["Berat (Kg) (Tampil)"] = df_table["BeratDisplay"].astype(str)
+        else:
+            df_table["Berat (Kg) (Tampil)"] = df_table["Berat (Kg)"].apply(lambda x: f"{x:.1f}".replace(".", ","))
+
         st.dataframe(df_table[[
             "No Nota","Tanggal Masuk","Nama Pelanggan","Jenis Pakaian",
-            "Jenis Layanan","Berat (Kg)","Harga per Kg","Total",
+            "Jenis Layanan","Berat (Kg) (Tampil)","Harga per Kg","Total",
             "Parfum","Jenis Transaksi","Status"
         ]], use_container_width=True)
+
     else:
         st.info("Tidak ada transaksi laundry pada periode ini.")
 
