@@ -31,23 +31,25 @@ def get_worksheet(sheet_name):
     ws = sh.worksheet(sheet_name)
     return ws
 
-# ------------------- BACA SHEET -------------------
 def read_sheet(sheet_name):
     """
     Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
-    terbaca dengan benar sebagai float menggunakan ValueRenderOption.
+    terbaca dengan benar sebagai float.
     """
     try:
         ws = get_worksheet(sheet_name)
+        all_values = ws.get_all_values()  # ambil semua sel persis
+        if not all_values:
+            return pd.DataFrame()
+        
+        header = all_values[0]
+        data = all_values[1:]
+        df = pd.DataFrame(data, columns=header)
 
-        # Ambil semua nilai sesuai tampilan (misal "5,3")
-        records = ws.get_all_records(value_render_option='FORMATTED_VALUE')
-        df = pd.DataFrame(records)
-
-        # ✅ Normalisasi kolom angka utama (khusus yang sering pakai koma)
+        # Normalisasi kolom angka
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                # Ubah jadi string, ganti koma jadi titik
+                # Hapus spasi & ganti koma jadi titik
                 df[col] = df[col].astype(str).str.strip().str.replace(",", ".", regex=False)
 
                 # Buang karakter non-digit kecuali titik
@@ -56,10 +58,10 @@ def read_sheet(sheet_name):
                 # Jika kosong, set 0
                 df[col] = df[col].apply(lambda x: "0" if x == "" else x)
 
-                # Konversi ke float
+                # Convert ke float
                 df[col] = df[col].astype(float)
 
-        # 🔧 Pastikan kolom string tetap aman
+        # Pastikan kolom string tetap aman
         for col in df.columns:
             if df[col].dtype == object:
                 df[col] = df[col].astype(str)
@@ -69,6 +71,7 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
+
 
 
 # ------------------- UTIL -------------------
