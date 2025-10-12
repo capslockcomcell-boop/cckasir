@@ -7,7 +7,7 @@ import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
-
+from Setting import load_config
 # ------------------- CONFIG -------------------
 CONFIG_FILE = "config.json"
 SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
@@ -86,15 +86,7 @@ def read_sheet(sheet_name):
         return pd.DataFrame()
 
 # ------------------- UTIL -------------------
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {
-        "nama_toko": "TR Laundry",
-        "alamat": "Jl. Buluh Cina, Panam",
-        "telepon": "087899913595"
-    }
+
 
 def format_rp(n):
     try:
@@ -116,7 +108,7 @@ def get_internet_date():
 
 # ------------------- MAIN -------------------
 def show():
-    cfg = load_config()
+    cfg = load_setting_config()
     st.title(f"📊 Laporan Laundry — {cfg['nama_toko']}")
 
     today = get_internet_date()
