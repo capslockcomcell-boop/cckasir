@@ -13,7 +13,7 @@ st.set_page_config(page_title="Pelanggan — Status Laundry", page_icon="🧺", 
 
 # ------------------- CONFIG -------------------
 CONFIG_FILE = "config.json"
-SPREADSHEET_ID = "GANTI_DENGAN_ID_SHEET_ANDA"
+SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
 SHEET_ORDER = "Order"   # pakai sheet Order sama seperti di order.py
 
 # ------------------- AUTH GOOGLE -------------------
