@@ -16,7 +16,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 
 # =============== KONFIGURASI ===============
-SPREADSHEET_ID = "1OsnO1xQFniBtEFCvGksR2KKrPt-9idE-w6-poM-wXKU"
+SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
 SHEET_PENGELUARAN = "Pengeluaran"
 CACHE_FILE = "pengeluaran_cache.csv"
 
