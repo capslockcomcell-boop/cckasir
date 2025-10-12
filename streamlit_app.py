@@ -1,4 +1,4 @@
-# ========================== app.py (Laundry v2.0) - Dengan Login Admin ==========================
+# ========================== app.py (Laundry v2.1) - Dengan Login Admin ==========================
 import streamlit as st
 from streamlit_option_menu import option_menu
 import Order, Report, Setting, Admin, Expense, Pelanggan
@@ -45,32 +45,31 @@ with st.sidebar:
     st.markdown("## 🧺 TR Laundry")
     st.markdown("### ✨ Bersih | Wangi | Rapi")
 
-    # Menu untuk user biasa (belum login)
     if not st.session_state.logged_in:
+        # Menu untuk user biasa
         selected = option_menu(
             "Menu Utama",
             [
                 "🧾 Order Laundry",
                 "✅ Pelanggan",
-                "💸 Pengeluaran",
                 "🔐 Login Admin"
             ],
             icons=[
                 "file-earmark-plus",
                 "person-check",
-                "cash-coin",
                 "lock"
             ],
             menu_icon="shop",
             default_index=0
         )
     else:
+        # Menu untuk admin
         selected = option_menu(
             "Menu Admin",
             [
                 "🧾 Order Laundry",
                 "✅ Pelanggan",
-                "💸 Pengeluaran",
+                "💸 Pengeluaran",   # Hanya admin
                 "📈 Report",
                 "📦 Admin",
                 "⚙️ Setting",
@@ -95,18 +94,15 @@ if not st.session_state.logged_in:
         Order.show()
     elif selected == "✅ Pelanggan":
         Pelanggan.show()
-    elif selected == "💸 Pengeluaran":
-        Expense.show()
     elif selected == "🔐 Login Admin":
         login_form()
-
 else:
     if selected == "🧾 Order Laundry":
         Order.show()
     elif selected == "✅ Pelanggan":
         Pelanggan.show()
     elif selected == "💸 Pengeluaran":
-        Expense.show()
+        Expense.show()  # Admin akses Pengeluaran
     elif selected == "📈 Report":
         Report.show()
     elif selected == "📦 Admin":
