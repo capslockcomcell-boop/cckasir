@@ -1,4 +1,4 @@
-# ===================== ORDER.PY (Laundry v1.1) =====================
+# ===================== ORDER.PY (Laundry v1.1) - with Print Receipt =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -233,6 +233,104 @@ Terima kasih 🙏
             hp = "62" + hp
         wa_link = f"https://wa.me/{hp}?text={requests.utils.quote(msg)}"
         st.markdown(f"[📲 KIRIM NOTA VIA WHATSAPP]({wa_link})", unsafe_allow_html=True)
+
+        # ===================== NOTE: PRINTABLE RECEIPT =====================
+        # Buat HTML nota yang rapi untuk tampilan dan cetak.
+        # CSS print akan menyembunyikan elemen selain #nota_struk saat proses cetak.
+        nota_html = f"""
+        <style>
+        /* Gaya tampilan struk di halaman (thermal-like width) */
+        #nota_container {{
+            font-family: monospace;
+            max-width: 320px; /* cocok untuk thermal ~80mm */
+            padding: 8px 6px;
+            border: 1px dashed #ddd;
+            background: #fff;
+            color: #000;
+            line-height: 1.15;
+            white-space: pre-wrap;
+        }}
+        #nota_header {{
+            text-align:center;
+            font-weight:bold;
+        }}
+        .nota_row {{
+            display:block;
+        }}
+        .right {{
+            float:right;
+        }}
+        /* Saat cetak, hanya tampilkan nota saja */
+        @media print {{
+            body * {{
+                visibility: hidden;
+            }}
+            #nota_struk, #nota_struk * {{
+                visibility: visible;
+            }}
+            #nota_struk {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }}
+        }}
+        </style>
+
+        <div id="nota_struk">
+            <div id="nota_container">
+                <div id="nota_header">
+                    {cfg['nama_toko']}\\n
+                    {cfg['alamat']}\\n
+                    HP: {cfg['telepon']}\\n
+                </div>
+                ------------------------------\\n
+                No Nota : {nota}\\n
+                Pelanggan : {nama}\\n
+                Tanggal Masuk : {tanggal_masuk_str}\\n
+                Estimasi Selesai : {estimasi_selesai_str}\\n
+                ------------------------------\\n
+                Jenis Pakaian : {jenis_pakaian}\\n
+                Layanan       : {jenis_layanan}\\n
+                Berat         : {berat:.2f} Kg\\n
+                Harga/Kg      : Rp {harga_per_kg:,.0f}\\n
+                SubTotal      : Rp {subtotal:,.0f}\\n
+                Diskon        : Rp {diskon:,.0f}\\n
+                ------------------------------\\n
+                TOTAL         : Rp {total:,.0f}\\n
+                ------------------------------\\n
+                Parfum : {parfum_final}\\n
+                Status : {status}\\n
+                ------------------------------\\n
+                Terima Kasih!\\n
+                =================================\\n
+                (Struk dibuat pada {now.strftime('%d/%m/%Y %H:%M')})
+            </div>
+        </div>
+        """
+
+        # Tampilkan nota di halaman (pengguna dapat melihat sebelum mencetak)
+        st.markdown(nota_html, unsafe_allow_html=True)
+
+        # Tombol cetak: langsung memanggil dialog print browser.
+        # Kita memakai tombol HTML sederhana untuk panggil window.print()
+        print_button_html = """
+        <div style="margin-top:10px;">
+            <button onclick="window.print()" style="
+                padding:8px 14px;
+                background:#f39c12;
+                color:white;
+                border:none;
+                border-radius:6px;
+                cursor:pointer;
+                font-size:16px;
+            ">🖨️ CETAK STRUK</button>
+        </div>
+        """
+        st.markdown(print_button_html, unsafe_allow_html=True)
+
+        # Catatan: untuk thermal printer mobile/USB, pengguna bisa memilih printer thermal di dialog print Chrome.
+        # ===================================================================
 
 if __name__ == "__main__":
     show()
