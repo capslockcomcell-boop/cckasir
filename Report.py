@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.5 - FIX BERAT & DESIMAL) =====================
+# ===================== REPORT.PY (Laundry v1.6 - FIX BERAT KOMAS) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -33,13 +33,12 @@ def get_worksheet(sheet_name):
 
 def read_sheet(sheet_name):
     """
-    Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
-    terbaca dengan benar sebagai float.
-    Untuk kolom 'Berat (Kg)', jika 2 digit tanpa koma, paksa jadi 2.2 misal 22 → 2.2
+    Membaca sheet Google dan memastikan angka desimal.
+    Untuk kolom 'Berat (Kg)', paksa 2 digit jadi koma jika perlu.
     """
     try:
         ws = get_worksheet(sheet_name)
-        all_values = ws.get_all_values()  # ambil semua sel persis
+        all_values = ws.get_all_values()
         if not all_values:
             return pd.DataFrame()
         
@@ -47,39 +46,33 @@ def read_sheet(sheet_name):
         data = all_values[1:]
         df = pd.DataFrame(data, columns=header)
 
-        # ------------------- NORMALISASI -------------------
-        def normalize_berat(x):
-            """
-            Memaksa format Berat (Kg) menjadi float:
-            - Jika input string ada koma: 5,3 -> 5.3
-            - Jika dua digit tanpa koma: 53 -> 5.3
-            - Jika satu digit: tetap 5 -> 5.0
-            """
-            s = str(x).strip()
-            s = s.replace(",", ".")
-            s = "".join([c for c in s if c.isdigit() or c == "."])
-            if s == "":
-                return 0.0
-            if "." in s:
-                return float(s)
-            f = float(s)
-            if f >= 10 and f < 100:
-                f = f / 10
-            return f
-
-        def normalize_general(x):
+        def normalize_angka(x, is_berat=False):
             s = str(x).strip().replace(",", ".")
             s = "".join([c for c in s if c.isdigit() or c == "."])
             if s == "":
                 return 0.0
-            return float(s)
+            f = float(s)
+            if is_berat:
+                # paksa koma jika dua digit tanpa titik
+                if f >= 10 and f < 100 and "." not in s:
+                    f = f / 10
+            return f
 
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                if col == "Berat (Kg)":
-                    df[col] = df[col].apply(normalize_berat)
+                is_berat = col == "Berat (Kg)"
+                df[col] = df[col].apply(lambda x: normalize_angka(x, is_berat=is_berat))
+
+        # Buat kolom display Berat (Kg) dengan koma
+        if "Berat (Kg)" in df.columns:
+            def berat_display(f):
+                if f < 10:
+                    return str(int(f))  # 1 digit → tampil apa adanya
                 else:
-                    df[col] = df[col].apply(normalize_general)
+                    # 2 digit atau lebih → paksa koma
+                    s = f"{f:.1f}".replace(".", ",")
+                    return s
+            df["BeratDisplay"] = df["Berat (Kg)"].apply(berat_display)
 
         # Pastikan kolom string tetap aman
         for col in df.columns:
@@ -91,7 +84,6 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
-
 
 # ------------------- UTIL -------------------
 def load_config():
@@ -122,7 +114,6 @@ def get_internet_date():
         pass
     return datetime.date.today()
 
-
 # ------------------- MAIN -------------------
 def show():
     cfg = load_config()
@@ -136,16 +127,17 @@ def show():
         st.info("Belum ada data transaksi laundry.")
         return
 
-    # ------------------- PARSE ORDER -------------------
+    # Parse tanggal
     if not df_order.empty and "Tanggal Masuk" in df_order.columns:
-        df_order["Tanggal Parsed"] = df_order["Tanggal Masuk"].str.split(" - ").str[0]
-        df_order["Tanggal Parsed"] = pd.to_datetime(df_order["Tanggal Parsed"], dayfirst=True, errors="coerce").dt.date
+        df_order["Tanggal Parsed"] = pd.to_datetime(
+            df_order["Tanggal Masuk"].str.split(" - ").str[0],
+            dayfirst=True, errors="coerce"
+        ).dt.date
 
-    # ------------------- PARSE PENGELUARAN -------------------
     if not df_pengeluaran.empty and "Tanggal" in df_pengeluaran.columns:
         df_pengeluaran["Tanggal"] = pd.to_datetime(df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce").dt.date
 
-    # ------------------- FILTER -------------------
+    # Filter
     st.sidebar.header("📅 Filter Data")
     mode = st.sidebar.radio("Mode Filter", ["Per Hari", "Per Bulan"], index=0)
 
@@ -156,6 +148,7 @@ def show():
     else:
         bulan_list = sorted(set(df_order["Tanggal Parsed"].dropna().map(lambda d: d.strftime("%Y-%m"))) if not df_order.empty else [])
         pilih_bulan = st.sidebar.selectbox("Pilih Bulan", ["Semua Bulan"] + bulan_list, index=0)
+
         if pilih_bulan == "Semua Bulan":
             df_order_f, df_pengeluaran_f = df_order.copy(), df_pengeluaran.copy()
         else:
@@ -163,7 +156,7 @@ def show():
             df_order_f = df_order[df_order["Tanggal Parsed"].apply(lambda d: pd.notna(d) and d.year == th and d.month == bln)]
             df_pengeluaran_f = df_pengeluaran[df_pengeluaran["Tanggal"].apply(lambda d: pd.notna(d) and d.year == th and d.month == bln)]
 
-    # ------------------- HITUNG LABA -------------------
+    # Hitung laba
     total_cash = total_transfer = total_pengeluaran = 0
     if not df_order_f.empty:
         total_cash = df_order_f[df_order_f["Jenis Transaksi"].str.lower() == "cash"]["Total"].sum()
@@ -174,7 +167,7 @@ def show():
     total_bersih = total_cash + total_transfer - total_pengeluaran
     total_kg = df_order_f["Berat (Kg)"].sum() if not df_order_f.empty else 0
 
-    # ------------------- METRIK -------------------
+    # Metrik
     st.markdown(f"""
     <style>
     .metric-container {{
@@ -202,10 +195,14 @@ def show():
 
     st.divider()
 
-    # ------------------- TABEL -------------------
+    # Tabel order
     st.subheader("🧾 Data Transaksi Laundry")
     if not df_order_f.empty:
-        st.dataframe(df_order_f[[
+        # ganti Berat (Kg) di tabel dengan display berkomanya
+        df_table = df_order_f.copy()
+        if "BeratDisplay" in df_table.columns:
+            df_table["Berat (Kg)"] = df_table["BeratDisplay"]
+        st.dataframe(df_table[[
             "No Nota","Tanggal Masuk","Nama Pelanggan","Jenis Pakaian",
             "Jenis Layanan","Berat (Kg)","Harga per Kg","Total",
             "Parfum","Jenis Transaksi","Status"
@@ -213,6 +210,7 @@ def show():
     else:
         st.info("Tidak ada transaksi laundry pada periode ini.")
 
+    # Tabel pengeluaran
     st.divider()
     st.subheader("💸 Data Pengeluaran")
     if not df_pengeluaran_f.empty:
@@ -220,12 +218,14 @@ def show():
     else:
         st.info("Tidak ada data pengeluaran.")
 
+    # CSV download
     st.divider()
     if not df_order_f.empty:
-        csv = df_order_f.to_csv(index=False).encode("utf-8")
+        df_csv = df_order_f.copy()
+        if "BeratDisplay" in df_csv.columns:
+            df_csv["Berat (Kg)"] = df_csv["BeratDisplay"]
+        csv = df_csv.to_csv(index=False, sep=";", decimal=",").encode("utf-8")
         st.download_button("⬇️ Download Laporan Laundry (CSV)", csv, "laporan_laundry.csv", "text/csv")
 
-
-# ------------------- MAIN -------------------
 if __name__ == "__main__":
     show()
