@@ -15,7 +15,12 @@ SHEET_ORDER = "Order"
 SHEET_PENGELUARAN = "Pengeluaran"
 
 # ------------------- AUTH GOOGLE -------------------
+# ------------------- AUTH GOOGLE (FAST + CACHE) -------------------
+@st.cache_resource(show_spinner=False)
 def authenticate_google():
+    """
+    Auth Google hanya sekali (di-cache) → tidak lemot tiap reload.
+    """
     creds_dict = st.secrets["gcp_service_account"]
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -28,8 +33,7 @@ def authenticate_google():
 def get_worksheet(sheet_name):
     client = authenticate_google()
     sh = client.open_by_key(SPREADSHEET_ID)
-    ws = sh.worksheet(sheet_name)
-    return ws
+    return sh.worksheet(sheet_name)
 
 def read_sheet(sheet_name):
     """
