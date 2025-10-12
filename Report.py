@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.2 - FIX DESIMAL KOMAS 100%) =====================
+# ===================== REPORT.PY (Laundry v1.3 - FIX DESIMAL KOMAS 100%) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -30,6 +30,7 @@ def get_worksheet(sheet_name):
     sh = client.open_by_key(SPREADSHEET_ID)
     return sh.worksheet(sheet_name)
 
+# ------------------- BACA SHEET -------------------
 def read_sheet(sheet_name):
     """
     Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
@@ -39,26 +40,25 @@ def read_sheet(sheet_name):
         ws = get_worksheet(sheet_name)
         df = pd.DataFrame(ws.get_all_records())
 
-        if df.empty:
-            return df
+        # ✅ Normalisasi kolom angka utama (khusus yang sering pakai koma)
+        for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
+            if col in df.columns:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", ".", regex=False)
+                    .str.replace(" ", "", regex=False)
+                    .str.replace("[^0-9.]", "", regex=True)
+                )
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-        # 🔧 Normalisasi angka koma (termasuk berat, harga, subtotal, total, dll)
-        numeric_cols = [c for c in df.columns if any(x in c.lower() for x in ["berat", "harga", "total", "subtotal", "diskon", "nominal"])]
-        for col in numeric_cols:
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(",", ".", regex=False)
-                .str.replace(" ", "", regex=False)
-            )
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-        # 🔧 Normalisasi koma di semua kolom bertipe string
+        # 🔧 Pastikan kolom string tetap aman
         for col in df.columns:
             if df[col].dtype == object:
-                df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
+                df[col] = df[col].astype(str)
 
         return df
+
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
@@ -113,19 +113,11 @@ def show():
                 df_order["Tanggal Parsed"], dayfirst=True, errors="coerce"
             ).dt.date
 
-        # Pastikan kolom numerik dibaca dengan benar
-        for kol in ["Total", "Berat (Kg)", "Harga per Kg", "Subtotal", "Diskon"]:
-            if kol in df_order.columns:
-                df_order[kol] = pd.to_numeric(df_order[kol], errors="coerce").fillna(0)
-
     # ------------------- PARSE PENGELUARAN -------------------
-    if not df_pengeluaran.empty:
-        if "Tanggal" in df_pengeluaran.columns:
-            df_pengeluaran["Tanggal"] = pd.to_datetime(
-                df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
-            ).dt.date
-        if "Nominal" in df_pengeluaran.columns:
-            df_pengeluaran["Nominal"] = pd.to_numeric(df_pengeluaran["Nominal"], errors="coerce").fillna(0)
+    if not df_pengeluaran.empty and "Tanggal" in df_pengeluaran.columns:
+        df_pengeluaran["Tanggal"] = pd.to_datetime(
+            df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
+        ).dt.date
 
     # ------------------- FILTER -------------------
     st.sidebar.header("📅 Filter Data")
@@ -136,13 +128,11 @@ def show():
         df_order_f = df_order[df_order["Tanggal Parsed"] == tgl] if not df_order.empty else pd.DataFrame()
         df_pengeluaran_f = df_pengeluaran[df_pengeluaran["Tanggal"] == tgl] if not df_pengeluaran.empty else pd.DataFrame()
     else:
-        tahun_ini = today.year
         bulan_list = sorted(set(df_order["Tanggal Parsed"].dropna().map(lambda d: d.strftime("%Y-%m"))) if not df_order.empty else [])
         pilih_bulan = st.sidebar.selectbox("Pilih Bulan", ["Semua Bulan"] + bulan_list, index=0)
 
         if pilih_bulan == "Semua Bulan":
-            df_order_f = df_order.copy()
-            df_pengeluaran_f = df_pengeluaran.copy()
+            df_order_f, df_pengeluaran_f = df_order.copy(), df_pengeluaran.copy()
         else:
             th, bln = map(int, pilih_bulan.split("-"))
             df_order_f = df_order[df_order["Tanggal Parsed"].apply(lambda d: pd.notna(d) and d.year == th and d.month == bln)]
@@ -177,46 +167,27 @@ def show():
     </style>
 
     <div class="metric-container">
-        <div class="metric-card">
-            <div class="metric-label">💵 Total Cash</div>
-            <div class="metric-value">{format_rp(total_cash)}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">🏦 Total Transfer</div>
-            <div class="metric-value">{format_rp(total_transfer)}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">🧺 Total Kg</div>
-            <div class="metric-value">{total_kg:.2f} Kg</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">💸 Pengeluaran</div>
-            <div class="metric-value" style="color:#ff6b6b;">- {format_rp(total_pengeluaran)}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">📊 Total Bersih</div>
-            <div class="metric-value" style="color:#4ade80;">{format_rp(total_bersih)}</div>
-        </div>
+        <div class="metric-card"><div class="metric-label">💵 Total Cash</div><div class="metric-value">{format_rp(total_cash)}</div></div>
+        <div class="metric-card"><div class="metric-label">🏦 Total Transfer</div><div class="metric-value">{format_rp(total_transfer)}</div></div>
+        <div class="metric-card"><div class="metric-label">🧺 Total Kg</div><div class="metric-value">{total_kg:.2f} Kg</div></div>
+        <div class="metric-card"><div class="metric-label">💸 Pengeluaran</div><div class="metric-value" style="color:#ff6b6b;">- {format_rp(total_pengeluaran)}</div></div>
+        <div class="metric-card"><div class="metric-label">📊 Total Bersih</div><div class="metric-value" style="color:#4ade80;">{format_rp(total_bersih)}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
     st.divider()
 
-    # ------------------- TABEL TRANSAKSI -------------------
+    # ------------------- TABEL -------------------
     st.subheader("🧾 Data Transaksi Laundry")
     if not df_order_f.empty:
-        st.dataframe(
-            df_order_f[[
-                "No Nota","Tanggal Masuk","Nama Pelanggan","Jenis Pakaian",
-                "Jenis Layanan","Berat (Kg)","Harga per Kg","Total",
-                "Parfum","Jenis Transaksi","Status"
-            ]],
-            use_container_width=True
-        )
+        st.dataframe(df_order_f[[
+            "No Nota","Tanggal Masuk","Nama Pelanggan","Jenis Pakaian",
+            "Jenis Layanan","Berat (Kg)","Harga per Kg","Total",
+            "Parfum","Jenis Transaksi","Status"
+        ]], use_container_width=True)
     else:
         st.info("Tidak ada transaksi laundry pada periode ini.")
 
-    # ------------------- TABEL PENGELUARAN -------------------
     st.divider()
     st.subheader("💸 Data Pengeluaran")
     if not df_pengeluaran_f.empty:
@@ -224,7 +195,6 @@ def show():
     else:
         st.info("Tidak ada data pengeluaran.")
 
-    # ------------------- DOWNLOAD -------------------
     st.divider()
     if not df_order_f.empty:
         csv = df_order_f.to_csv(index=False).encode("utf-8")
