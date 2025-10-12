@@ -43,7 +43,13 @@ def show():
 
     jenis_pakaian = st.text_input("Jenis Pakaian")
     jenis_layanan = st.text_input("Jenis Layanan")
-    harga_per_kg = st.number_input("Harga per Kg", min_value=0.0, step=500.0)
+    harga_per_kg = st.number_input(
+        "Harga per Kg",
+        min_value=0.0,
+        step=500.0,
+        format="%.0f"   # tidak ada desimal
+    )
+
     parfum = st.text_input("Parfum")
 
     if st.button("💾 Simpan Data"):
