@@ -1,4 +1,4 @@
-# ========================== pelanggan.py (Laundry v4.1) ==========================
+# ========================== pelanggan.py (Laundry v4.2) ==========================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -14,7 +14,7 @@ st.set_page_config(page_title="Pelanggan — Status Laundry", page_icon="🧺", 
 # ------------------- CONFIG -------------------
 CONFIG_FILE = "config.json"
 SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
-SHEET_ORDER = "Order"   # pakai sheet Order sama seperti di order.py
+SHEET_ORDER = "Order"
 
 # ------------------- AUTH GOOGLE -------------------
 def authenticate_google():
@@ -30,7 +30,7 @@ def get_worksheet(sheet_name):
     return sh.worksheet(sheet_name)
 
 # ------------------- READ SHEET (cached) -------------------
-@st.cache_data(ttl=60)  # cache lebih pendek supaya lebih cepat update
+@st.cache_data(ttl=60)
 def read_sheet_once(sheet_name):
     ws = get_worksheet(sheet_name)
     df = pd.DataFrame(ws.get_all_records())
@@ -80,7 +80,7 @@ def update_sheet_row_by_nota(sheet_name, nota, updates: dict):
 # ------------------- UTIL -------------------
 def load_config():
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE) as f:
             return json.load(f)
     return {"nama_toko": "TR Laundry", "alamat": "Jl. Buluh Cina, Panam", "telepon": "087899913595"}
 
@@ -88,14 +88,24 @@ def get_waktu_jakarta():
     tz = datetime.timezone(datetime.timedelta(hours=7))
     return datetime.datetime.now(tz)
 
-# WA konfirmasi jemput
-def kirim_wa_konfirmasi(nama, no_nota, no_hp, nama_toko):
+def format_rp(n):
+    try:
+        nnum = int(float(n))
+        return f"Rp {nnum:,.0f}".replace(",", ".")
+    except:
+        return str(n)
+
+# ------------------- WA KONFIRMASI -------------------
+def kirim_wa_konfirmasi(nama, no_nota, no_hp, total, jenis_transaksi, nama_toko):
     msg = f"""Halo {nama},
 Laundry anda dengan nomor Nota {no_nota} sudah selesai diproses dan siap untuk diambil. 🧺
 
+Total Biaya: {total}
+Pembayaran: {jenis_transaksi}
+
 Terima Kasih,
 {nama_toko}"""
-    no_hp_clean = str(no_hp).replace("+", "").replace(" ", "").replace("-", "")
+    no_hp_clean = str(no_hp).replace("+","").replace(" ","").replace("-","")
     if no_hp_clean.startswith("0"):
         no_hp_clean = "62" + no_hp_clean[1:]
     elif not no_hp_clean.startswith("62"):
@@ -103,15 +113,16 @@ Terima Kasih,
     if no_hp_clean.isdigit() and len(no_hp_clean) >= 10:
         wa_link = f"https://wa.me/{no_hp_clean}?text={urllib.parse.quote(msg)}"
         st.markdown(f"[📲 Kirim Konfirmasi Ambil]({wa_link})", unsafe_allow_html=True)
+        js = f"""
+        <script>
+        setTimeout(function(){{
+            window.open("{wa_link}", "_blank");
+        }}, 500);
+        </script>
+        """
+        st.markdown(js, unsafe_allow_html=True)
     else:
         st.warning("⚠️ Nomor HP pelanggan tidak valid.")
-
-def format_rp(n):
-    try:
-        nnum = int(float(n))
-        return f"Rp {nnum:,.0f}".replace(",", ".")
-    except:
-        return str(n)
 
 # ------------------- STYLES -------------------
 STYLE = """
@@ -124,66 +135,81 @@ STYLE = """
 """
 st.markdown(STYLE, unsafe_allow_html=True)
 
-# ------------------- RENDER CARD -------------------
+# ------------------- DATAFRAME PREP -------------------
 def prepare_df_for_view(df):
-    for col in ["Tanggal Masuk","No Nota","Nama Pelanggan","No HP","Jenis Pakaian","Jenis Layanan","Total","Status"]:
+    for col in ["Tanggal Masuk","No Nota","Nama Pelanggan","No HP","Jenis Pakaian","Jenis Layanan","Total","Status","Status Antrian"]:
         if col not in df.columns:
             df[col] = ""
-    # parsing tanggal otomatis, ambil 10 karakter pertama (dd/mm/yyyy)
+    # isi Status Antrian default dari Status lama jika kosong
+    df["Status Antrian"] = df["Status Antrian"].fillna("").astype(str).str.strip()
+    mask_copy = (df["Status Antrian"] == "") & (df["Status"].astype(str).str.strip() != "")
+    df.loc[mask_copy, "Status Antrian"] = df.loc[mask_copy, "Status"]
     df["Tanggal_parsed"] = pd.to_datetime(df["Tanggal Masuk"].astype(str).str[:10], errors="coerce", dayfirst=True)
-    df["Status"] = df["Status"].fillna("").astype(str).str.strip()
     return df
 
+# ------------------- RENDER CARD -------------------
 def render_card_entry(row, cfg, active_status):
-    no_nota = row.get("No Nota", "")
-    nama = row.get("Nama Pelanggan", "")
-    no_hp = row.get("No HP", "")
-    jenis_pakaian = row.get("Jenis Pakaian", "")
-    jenis_layanan = row.get("Jenis Layanan", "")
-    total = format_rp(row.get("Total", 0))
-    status = (row.get("Status") or "").strip()
+    no_nota = row.get("No Nota","")
+    nama = row.get("Nama Pelanggan","")
+    no_hp = row.get("No HP","")
+    jenis_pakaian = row.get("Jenis Pakaian","")
+    jenis_layanan = row.get("Jenis Layanan","")
+    total = format_rp(row.get("Total",0))
+    status_antrian = (row.get("Status Antrian") or "").strip()
+    jenis_transaksi = row.get("Jenis Transaksi","Cash")
 
-    header_label = f"🧾 {no_nota} — {nama} — {jenis_pakaian} ({status or 'Antrian'})"
+    header_label = f"🧾 {no_nota} — {nama} — {jenis_pakaian} ({status_antrian or 'Antrian'})"
     with st.expander(header_label, expanded=False):
         st.write(f"📅 **Tanggal Masuk:** {row.get('Tanggal Masuk','')}")
         st.write(f"👤 **Nama:** {nama}")
         st.write(f"📞 **No HP:** {no_hp}")
         st.write(f"🧺 **Layanan:** {jenis_layanan}")
         st.write(f"💰 **Total:** {total}")
-        st.write(f"📌 **Status:** {status or 'Antrian'}")
+        st.write(f"📌 **Status Antrian:** {status_antrian or 'Antrian'}")
 
-        if (status == "" or status.lower() == "antrian") and active_status == "Antrian":
+        # ---------- ACTIONS ----------
+        # Antrian → Siap Diambil
+        if (status_antrian == "" or status_antrian.lower() == "antrian") and active_status=="Antrian":
             if st.button("✅ Siap Diambil (Simpan & Kirim WA)", key=f"ambil_{no_nota}"):
-                ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, {"Status": "Siap Diambil"})
+                updates = {
+                    "Status Antrian": "Siap Diambil",
+                    "Status": "Siap Diambil",
+                    "Jenis Transaksi": jenis_transaksi
+                }
+                ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, updates)
                 if ok:
                     read_sheet_once.clear()
                     reload_df()
-                    kirim_wa_konfirmasi(nama, no_nota, no_hp, cfg['nama_toko'])
+                    kirim_wa_konfirmasi(nama, no_nota, no_hp, total, jenis_transaksi, cfg['nama_toko'])
                     st.success(f"Nota {no_nota} → Siap Diambil")
-        elif status.lower() == "siap diambil" and active_status == "Siap Diambil":
-            c1, c2 = st.columns(2)
+
+        # Siap Diambil → Selesai / Batal
+        elif status_antrian.lower() == "siap diambil" and active_status=="Siap Diambil":
+            c1,c2 = st.columns(2)
             with c1:
                 if st.button("✔️ Selesai", key=f"selesai_{no_nota}"):
-                    ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, {"Status": "Selesai"})
+                    ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, {"Status Antrian":"Selesai","Status":"Selesai"})
                     if ok:
                         read_sheet_once.clear()
                         reload_df()
                         st.success(f"Nota {no_nota} → Selesai")
             with c2:
                 if st.button("❌ Batal", key=f"batal_{no_nota}"):
-                    ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, {"Status": "Batal"})
+                    ok = update_sheet_row_by_nota(SHEET_ORDER, no_nota, {"Status Antrian":"Batal","Status":"Batal"})
                     if ok:
                         read_sheet_once.clear()
                         reload_df()
                         st.warning(f"Nota {no_nota} → Batal")
+        else:
+            st.info(f"📌 Status Antrian: {status_antrian or 'Antrian'}")
 
 # ------------------- APP -------------------
 def show():
     cfg = load_config()
     st.title("📱 Pelanggan — Status Laundry & Kirim WA")
 
-    # Reload
-    colr, colr2 = st.columns([1,4])
+    # reload
+    colr,colr2 = st.columns([1,4])
     with colr:
         if st.button("🔄 Reload Data"):
             read_sheet_once.clear()
@@ -193,66 +219,64 @@ def show():
     df = load_df()
     df = prepare_df_for_view(df)
 
-    total_antrian = len(df[(df["Status"] == "") | (df["Status"].str.lower() == "antrian")])
-    total_siap = len(df[df["Status"].str.lower() == "siap diambil"])
-    total_selesai = len(df[df["Status"].str.lower() == "selesai"])
-    total_batal = len(df[df["Status"].str.lower() == "batal"])
+    # statistics
+    total_antrian = len(df[(df["Status Antrian"]=="")|(df["Status Antrian"].str.lower()=="antrian")])
+    total_siap = len(df[df["Status Antrian"].str.lower()=="siap diambil"])
+    total_selesai = len(df[df["Status Antrian"].str.lower()=="selesai"])
+    total_batal = len(df[df["Status Antrian"].str.lower()=="batal"])
 
-    s1, s2, s3, s4 = st.columns([1.1,1.1,1.1,1.1], gap="large")
-    s1.markdown(f'<div class="stat-card card-orange">🕒<br>Antrian<br><div style="font-size:18px">{total_antrian}</div></div>', unsafe_allow_html=True)
-    s2.markdown(f'<div class="stat-card card-blue">📢<br>Siap Diambil<br><div style="font-size:18px">{total_siap}</div></div>', unsafe_allow_html=True)
-    s3.markdown(f'<div class="stat-card card-green">✅<br>Selesai<br><div style="font-size:18px">{total_selesai}</div></div>', unsafe_allow_html=True)
-    s4.markdown(f'<div class="stat-card card-red">❌<br>Batal<br><div style="font-size:18px">{total_batal}</div></div>', unsafe_allow_html=True)
+    s1,s2,s3,s4 = st.columns([1.1,1.1,1.1,1.1], gap="large")
+    s1.markdown(f'<div class="stat-card card-orange">🕒<br>Antrian<br><div style="font-size:18px">{total_antrian}</div></div>',unsafe_allow_html=True)
+    s2.markdown(f'<div class="stat-card card-blue">📢<br>Siap Diambil<br><div style="font-size:18px">{total_siap}</div></div>',unsafe_allow_html=True)
+    s3.markdown(f'<div class="stat-card card-green">✅<br>Selesai<br><div style="font-size:18px">{total_selesai}</div></div>',unsafe_allow_html=True)
+    s4.markdown(f'<div class="stat-card card-red">❌<br>Batal<br><div style="font-size:18px">{total_batal}</div></div>',unsafe_allow_html=True)
 
-    tab_antrian, tab_siap, tab_selesai, tab_batal = st.tabs(["🕒 Antrian", "📢 Siap Diambil", "✅ Selesai", "❌ Batal"])
+    tab_antrian,tab_siap,tab_selesai,tab_batal = st.tabs(["🕒 Antrian","📢 Siap Diambil","✅ Selesai","❌ Batal"])
 
     # filter
     with st.expander("🔧 Filter & Cari"):
         today = get_waktu_jakarta().date()
         tipe_filter = st.selectbox("Filter Waktu", ["Semua","Per Hari","Per Bulan"], index=0)
-        if tipe_filter == "Per Hari":
+        if tipe_filter=="Per Hari":
             tanggal_pilih = st.date_input("Pilih Tanggal", today)
-        elif tipe_filter == "Per Bulan":
+        elif tipe_filter=="Per Bulan":
             tahun = st.number_input("Tahun", value=today.year, step=1)
-            bulan = st.number_input("Bulan", value=today.month, min_value=1, max_value=12, step=1)
+            bulan = st.number_input("Bulan", value=today.month, min_value=1,max_value=12, step=1)
         q = st.text_input("Cari Nama / Nota")
 
     def apply_filters(df_in):
         df_out = df_in.copy()
-        if tipe_filter == "Per Hari":
-            df_out = df_out[df_out["Tanggal_parsed"].dt.date == tanggal_pilih]
-        elif tipe_filter == "Per Bulan":
-            df_out = df_out[(df_out["Tanggal_parsed"].dt.year == tahun) & (df_out["Tanggal_parsed"].dt.month == bulan)]
-        if q:
-            ql = q.lower()
+        if tipe_filter=="Per Hari":
+            df_out = df_out[df_out["Tanggal_parsed"].dt.date==tanggal_pilih]
+        elif tipe_filter=="Per Bulan":
+            df_out = df_out[(df_out["Tanggal_parsed"].dt.year==tahun)&(df_out["Tanggal_parsed"].dt.month==bulan)]
+        if q and str(q).strip():
+            ql = str(q).strip().lower()
             df_out = df_out[df_out["Nama Pelanggan"].astype(str).str.lower().str.contains(ql) | df_out["No Nota"].astype(str).str.lower().str.contains(ql)]
         return df_out
 
     def show_tab(df_tab, active_status):
         df_tab = apply_filters(df_tab)
-        if len(df_tab) == 0:
+        if len(df_tab)==0:
             st.info(f"Tidak ada data untuk status {active_status}")
             return
-        per_page = 25
-        total = len(df_tab)
-        pages = (total - 1) // per_page + 1
-        page = st.number_input(f"Halaman ({active_status})", 1, pages, 1, key=f"page_{active_status}")
-        start = (page - 1) * per_page
-        end = start + per_page
-        for idx, row in df_tab.iloc[start:end].iterrows():
+        per_page=25
+        total=len(df_tab)
+        pages=(total-1)//per_page+1
+        page=st.number_input(f"Halaman ({active_status})", 1, pages, 1, key=f"page_{active_status}")
+        start=(page-1)*per_page
+        end=start+per_page
+        for idx,row in df_tab.iloc[start:end].iterrows():
             render_card_entry(row, cfg, active_status)
 
     with tab_antrian:
-        show_tab(df[(df["Status"] == "") | (df["Status"].str.lower() == "antrian")], "Antrian")
-
+        show_tab(df[(df["Status Antrian"]=="")|(df["Status Antrian"].str.lower()=="antrian")], "Antrian")
     with tab_siap:
-        show_tab(df[df["Status"].str.lower() == "siap diambil"], "Siap Diambil")
-
+        show_tab(df[df["Status Antrian"].str.lower()=="siap diambil"], "Siap Diambil")
     with tab_selesai:
-        show_tab(df[df["Status"].str.lower() == "selesai"], "Selesai")
-
+        show_tab(df[df["Status Antrian"].str.lower()=="selesai"], "Selesai")
     with tab_batal:
-        show_tab(df[df["Status"].str.lower() == "batal"], "Batal")
+        show_tab(df[df["Status Antrian"].str.lower()=="batal"], "Batal")
 
-if __name__ == "__main__":
-    show
+if __name__=="__main__":
+    show()
