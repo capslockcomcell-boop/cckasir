@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.0) =====================
+# ===================== REPORT.PY (Laundry v1.1 - FIX DESIMAL KOMAS) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -31,9 +31,18 @@ def get_worksheet(sheet_name):
     return sh.worksheet(sheet_name)
 
 def read_sheet(sheet_name):
+    """
+    Membaca sheet Google dan membersihkan angka yang memakai koma (misal 5,6 → 5.6).
+    """
     try:
         ws = get_worksheet(sheet_name)
         df = pd.DataFrame(ws.get_all_records())
+
+        # --- Normalisasi nilai numerik berformat lokal (koma desimal) ---
+        for col in df.columns:
+            if df[col].dtype == object:
+                # Ganti koma ke titik hanya jika kolom terlihat seperti angka
+                df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
         return df
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
@@ -85,16 +94,22 @@ def show():
     if not df_order.empty:
         if "Tanggal Masuk" in df_order.columns:
             df_order["Tanggal Parsed"] = df_order["Tanggal Masuk"].str.split(" - ").str[0]
-            df_order["Tanggal Parsed"] = pd.to_datetime(df_order["Tanggal Parsed"], dayfirst=True, errors="coerce").dt.date
-        if "Total" in df_order.columns:
-            df_order["Total"] = pd.to_numeric(df_order["Total"], errors="coerce").fillna(0)
-        if "Berat (Kg)" in df_order.columns:
-            df_order["Berat (Kg)"] = pd.to_numeric(df_order["Berat (Kg)"], errors="coerce").fillna(0)
+            df_order["Tanggal Parsed"] = pd.to_datetime(
+                df_order["Tanggal Parsed"], dayfirst=True, errors="coerce"
+            ).dt.date
+
+        # Pastikan kolom numerik dibaca dengan benar
+        for kol in ["Total", "Berat (Kg)", "Harga per Kg", "Subtotal", "Diskon"]:
+            if kol in df_order.columns:
+                df_order[kol] = pd.to_numeric(df_order[kol], errors="coerce").fillna(0)
 
     # ------------------- PARSE PENGELUARAN -------------------
     if not df_pengeluaran.empty:
-        df_pengeluaran["Tanggal"] = pd.to_datetime(df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce").dt.date
-        df_pengeluaran["Nominal"] = pd.to_numeric(df_pengeluaran["Nominal"], errors="coerce").fillna(0)
+        df_pengeluaran["Tanggal"] = pd.to_datetime(
+            df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
+        ).dt.date
+        if "Nominal" in df_pengeluaran.columns:
+            df_pengeluaran["Nominal"] = pd.to_numeric(df_pengeluaran["Nominal"], errors="coerce").fillna(0)
 
     # ------------------- FILTER -------------------
     st.sidebar.header("📅 Filter Data")
