@@ -1,4 +1,4 @@
-# ===================== ORDER.PY (v8.0 - LAUNDRY VERSION) =====================
+# ===================== ORDER.PY (Laundry v1.0) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,14 +9,13 @@ import json
 import requests
 import urllib.parse
 
-# ================= CONFIG ==================
-SPREADSHEET_ID = "1OsnO1xQFniBtEFCvGksR2KKrPt-9idE-w6-poM-wXKU"
-SHEET_ORDER = "Order"      # Sheet utama (ganti dari Servis)
-SHEET_ADMIN = "Admin"      # Ambil harga laundry dari sheet Admin
+# ============ KONFIGURASI ============
+SPREADSHEET_ID = "GANTI_DENGAN_ID_SHEET_ANDA"
+SHEET_ORDER = "Order"
+SHEET_ADMIN = "Admin"
 CONFIG_FILE = "config.json"
-DATA_FILE = "order_data.csv"  # cache lokal
 
-# =============== AUTH GOOGLE ===============
+# ============ AUTH GOOGLE ============
 def authenticate_google():
     creds_dict = st.secrets["gcp_service_account"]
     scope = [
@@ -32,7 +31,7 @@ def get_worksheet(sheet_name):
     sh = client.open_by_key(SPREADSHEET_ID)
     return sh.worksheet(sheet_name)
 
-# =============== CONFIG FILE ===============
+# ============ CONFIG TOKO ============
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
@@ -43,37 +42,23 @@ def load_config():
         "telepon": "087899913595"
     }
 
-# =============== REALTIME WIB ===============
+# ============ WIB TANGGAL ============
 @st.cache_data(ttl=300)
-def get_cached_internet_date():
+def get_cached_internet_datetime():
     try:
         res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Jakarta", timeout=5)
         if res.status_code == 200:
             data = res.json()
             dt = datetime.datetime.fromisoformat(data["datetime"].replace("Z", "+00:00"))
             return dt
-    except Exception as e:
-        print("⚠️ Gagal ambil waktu internet:", e)
+    except:
+        pass
     return datetime.datetime.now()
 
-# =============== CACHE CSV ===============
-def load_local_data():
-    if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
-    return pd.DataFrame(columns=[
-        "No Nota", "Tanggal Masuk", "Estimasi Selesai",
-        "Nama Pelanggan", "No HP",
-        "Jenis Pakaian", "Layanan", "Berat (Kg)", "Harga/kg", "Subtotal",
-        "Parfum", "Diskon", "Total", "Jenis Transaksi", "Status", "uploaded"
-    ])
-
-def save_local_data(df):
-    df.to_csv(DATA_FILE, index=False)
-
-# =============== NOMOR NOTA ===============
-def get_next_nota_from_sheet(prefix):
+# ============ NOMOR NOTA ============
+def get_next_nota_from_sheet(sheet_name, prefix):
     try:
-        ws = get_worksheet(SHEET_ORDER)
+        ws = get_worksheet(sheet_name)
         data = ws.col_values(1)
         if len(data) <= 1:
             return f"{prefix}0000001"
@@ -88,129 +73,101 @@ def get_next_nota_from_sheet(prefix):
             num = 0
         return f"{prefix}{num+1:07d}"
     except Exception as e:
-        print("Error generate nota:", e)
+        print("Error nota:", e)
         return f"{prefix}0000001"
 
-# =============== SPREADSHEET OPS ===============
+# ============ HARGA LAYANAN ============
+@st.cache_data(ttl=120)
+def get_admin_prices():
+    ws = get_worksheet(SHEET_ADMIN)
+    df = pd.DataFrame(ws.get_all_records())
+    harga_dict = {row["Jenis Layanan"]: row["Harga per Kg"] for _, row in df.iterrows()}
+    return harga_dict
+
+# ============ SIMPAN ORDER ============
 def append_to_sheet(sheet_name, data: dict):
     ws = get_worksheet(sheet_name)
     headers = ws.row_values(1)
     row = [data.get(h, "") for h in headers]
     ws.append_row(row, value_input_option="USER_ENTERED")
 
-@st.cache_data(ttl=120)
-def read_admin_harga():
-    try:
-        ws = get_worksheet(SHEET_ADMIN)
-        df = pd.DataFrame(ws.get_all_records())
-        return df
-    except:
-        return pd.DataFrame(columns=["Layanan", "Harga"])
-
-# =============== SYNC CACHE ===============
-def sync_local_cache():
-    df = load_local_data()
-    if df.empty:
-        return
-    not_uploaded = df[df["uploaded"] == False]
-    if not not_uploaded.empty:
-        st.info(f"🔁 Upload ulang {len(not_uploaded)} data...")
-        for _, row in not_uploaded.iterrows():
-            try:
-                append_to_sheet(SHEET_ORDER, row.to_dict())
-                df.loc[df["No Nota"] == row["No Nota"], "uploaded"] = True
-            except Exception as e:
-                st.warning(f"Gagal upload {row['No Nota']}: {e}")
-        save_local_data(df)
-        st.success("✅ Sinkronisasi selesai!")
-
-# =============== PAGE APP ===============
+# ============ UI ============
 def show():
     cfg = load_config()
-    sync_local_cache()
     st.title("🧺 Transaksi Laundry")
 
-    with st.form("form_laundry"):
-        waktu_sekarang = get_cached_internet_date()
-        tanggal_masuk = waktu_sekarang
-        estimasi_selesai = waktu_sekarang + datetime.timedelta(days=3)
+    now = get_cached_internet_datetime()
+    tanggal_masuk = st.date_input("Tanggal Masuk", value=now.date())
+    estimasi_selesai = st.date_input("Estimasi Selesai", value=(now + datetime.timedelta(days=3)).date())
+    jam = st.time_input("Jam Masuk", value=now.time())
 
-        nama = st.text_input("Nama Pelanggan")
-        no_hp = st.text_input("Nomor WhatsApp")
+    nama = st.text_input("Nama Pelanggan")
+    no_hp = st.text_input("Nomor WhatsApp")
 
-        jenis_pakaian = st.selectbox(
-            "Jenis Pakaian",
-            ["Baju Biasa", "Sprei", "Selimut", "Bed Cover", "Jas", "Jacket", "Sepatu"]
-        )
-        layanan_list = ["Cuci Lipat", "Cuci Setrika", "Cuci Lipat Express", "Cuci Setrika Express"]
-        layanan = st.selectbox("Layanan", layanan_list)
+    jenis_pakaian = st.selectbox(
+        "Jenis Pakaian",
+        ["Baju Biasa", "Sprei", "Selimut", "Bed Cover", "Jas", "Jacket", "Sepatu"]
+    )
 
-        # Ambil harga default dari Sheet Admin
-        admin_df = read_admin_harga()
-        harga_default = 0
-        if not admin_df.empty and layanan in admin_df["Layanan"].values:
-            harga_default = int(admin_df.loc[admin_df["Layanan"] == layanan, "Harga"].values[0])
-        harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, format="%.0f")
-        berat = st.number_input("Berat (Kg)", min_value=0.0, format="%.2f")
+    layanan_list = ["Cuci Lipat", "Cuci Setrika", "Cuci Lipat Express", "Cuci Setrika Express"]
+    jenis_layanan = st.selectbox("Jenis Layanan", layanan_list)
 
-        parfum_list = ["Sakura", "Gardenia", "Lily", "Jasmine", "Violet", "Lavender",
-                       "Ocean Fresh", "Snappy", "Sweet Poppy", "Aqua Fresh", "Lainnya..."]
-        parfum_pilihan = st.selectbox("Pilih Parfum", parfum_list)
-        parfum_manual = ""
-        if parfum_pilihan == "Lainnya...":
-            parfum_manual = st.text_input("Nama Parfum Lainnya")
-        parfum_final = parfum_manual if parfum_manual else parfum_pilihan
+    admin_harga = get_admin_prices()
+    harga_default = admin_harga.get(jenis_layanan, 0)
+    harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, step=500.0)
 
-        diskon = st.number_input("Diskon (Rp)", min_value=0.0, format="%.0f")
-        jenis_transaksi = st.radio("Jenis Transaksi", ["Cash", "Transfer"], horizontal=True)
+    berat = st.number_input("Berat (Kg)", min_value=0.0, step=0.01, format="%.2f")
 
-        subtotal = harga_per_kg * berat
-        total = subtotal - diskon
-        status = st.selectbox("Status Pembayaran", ["BELUM BAYAR", "LUNAS"])
+    parfum_list = ["Sakura", "Gardenia", "Lily", "Jasmine", "Violet", "Lavender", "Ocean Fresh", "Snappy", "Sweet Poppy", "Aqua Fresh"]
+    parfum_pilihan = st.selectbox("Pilih Parfum", parfum_list)
+    parfum_custom = st.text_input("Parfum Custom (opsional)")
+    parfum_final = parfum_custom if parfum_custom else parfum_pilihan
 
-        st.markdown(f"### 💰 Subtotal: Rp {subtotal:,.0f}   |   Total: Rp {total:,.0f}".replace(",", "."))
+    diskon = st.number_input("Diskon (Rp)", min_value=0.0, step=100.0)
+    jenis_transaksi = st.radio("Jenis Transaksi", ["Cash", "Transfer"], horizontal=True)
+    status = st.radio("Status Pembayaran", ["BELUM BAYAR", "LUNAS"], horizontal=True)
 
-        submitted = st.form_submit_button("💾 Simpan Transaksi")
+    subtotal = berat * harga_per_kg
+    total = subtotal - diskon
+    st.markdown(f"### 💰 Total: Rp {total:,.0f}".replace(",", "."))
 
-    if submitted:
-        if not nama or berat <= 0:
-            st.error("Nama pelanggan dan berat wajib diisi!")
+    if st.button("💾 Simpan Transaksi"):
+        if not nama or not no_hp or berat <= 0 or harga_per_kg <= 0:
+            st.error("⚠️ Nama, No HP, berat, dan harga harus diisi.")
             return
 
-        nota = get_next_nota_from_sheet("TRX/")
-        tgl_masuk_str = tanggal_masuk.strftime("%d/%m/%Y - %H:%M")
-        tgl_estimasi_str = estimasi_selesai.strftime("%d/%m/%Y - %H:%M")
+        nota = get_next_nota_from_sheet(SHEET_ORDER, "TRX/")
+        tanggal_masuk_str = f"{tanggal_masuk.strftime('%d/%m/%Y')} - {jam.strftime('%H:%M')}"
+        estimasi_selesai_str = f"{estimasi_selesai.strftime('%d/%m/%Y')} - {jam.strftime('%H:%M')}"
 
-        data_order = {
+        order_data = {
             "No Nota": nota,
-            "Tanggal Masuk": tgl_masuk_str,
-            "Estimasi Selesai": tgl_estimasi_str,
+            "Tanggal Masuk": tanggal_masuk_str,
+            "Estimasi Selesai": estimasi_selesai_str,
             "Nama Pelanggan": nama,
             "No HP": no_hp,
             "Jenis Pakaian": jenis_pakaian,
-            "Layanan": layanan,
+            "Jenis Layanan": jenis_layanan,
             "Berat (Kg)": berat,
-            "Harga/kg": harga_per_kg,
+            "Harga per Kg": harga_per_kg,
             "Subtotal": subtotal,
-            "Parfum": parfum_final,
             "Diskon": diskon,
             "Total": total,
+            "Parfum": parfum_final,
             "Jenis Transaksi": jenis_transaksi,
             "Status": status,
-            "uploaded": False
+            "Uploaded": True
         }
 
-        df = load_local_data()
-        df = pd.concat([df, pd.DataFrame([data_order])], ignore_index=True)
         try:
-            append_to_sheet(SHEET_ORDER, data_order)
-            df.loc[df["No Nota"] == nota, "uploaded"] = True
-            st.success(f"✅ Transaksi Laundry {jenis_pakaian} berhasil disimpan!")
+            append_to_sheet(SHEET_ORDER, order_data)
+            st.success(f"✅ Transaksi Laundry {nota} berhasil disimpan!")
         except Exception as e:
-            st.warning(f"⚠️ Gagal upload ke Sheet: {e}. Disimpan lokal dulu.")
-        save_local_data(df)
+            st.error(f"❌ Gagal simpan ke Google Sheet: {e}")
+            return
 
-        msg = f"""*NOTA ELEKTRONIK*
+        # === Nota WA ===
+        msg = f"""NOTA ELEKTRONIK
 
 {cfg['nama_toko']}
 {cfg['alamat']}
@@ -218,32 +175,29 @@ HP : {cfg['telepon']}
 
 =======================
 No Nota : {nota}
-
 Pelanggan : {nama}
-Tanggal Masuk    : {tgl_masuk_str}
-Estimasi Selesai : {tgl_estimasi_str}
 
+Tanggal Masuk    : {tanggal_masuk_str}
+Estimasi Selesai : {estimasi_selesai_str}
 =======================
 - Jenis Pakaian = {jenis_pakaian}
-- {berat:.2f} Kg ({layanan})
-{berat:.2f} x {harga_per_kg:,.0f} = Rp {subtotal:,.0f}
-
+- Kiloan ({jenis_layanan})
+{berat:.2f} Kg x {harga_per_kg:,.0f} = Rp {subtotal:,.0f}
 =======================
 Parfum  : {parfum_final}
 Status  : {status}
-
 =======================
 SubTotal = Rp {subtotal:,.0f}
 Diskon   = Rp {diskon:,.0f}
 Total    = Rp {total:,.0f}
 =======================
+Terima kasih 🙏
 """
-        hp = str(no_hp).replace("+", "").replace(" ", "").replace("-", "").strip()
-        if hp:
-            if hp.startswith("0"): hp = "62" + hp[1:]
-            elif not hp.startswith("62"): hp = "62" + hp
-            wa_link = f"https://wa.me/{hp}?text={requests.utils.quote(msg)}"
-            st.markdown(f"[📲 KIRIM NOTA VIA WHATSAPP]({wa_link})", unsafe_allow_html=True)
+        hp = str(no_hp).replace("+", "").replace(" ", "").replace("-", "")
+        if hp.startswith("0"): hp = "62" + hp[1:]
+        elif not hp.startswith("62"): hp = "62" + hp
+        wa_link = f"https://wa.me/{hp}?text={requests.utils.quote(msg)}"
+        st.markdown(f"[📲 KIRIM NOTA VIA WHATSAPP]({wa_link})", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     show()
