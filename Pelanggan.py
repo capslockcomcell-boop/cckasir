@@ -1,4 +1,4 @@
-# ========================== pelanggan.py (Laundry v4.0) ==========================
+# ========================== pelanggan.py (Laundry v4.1) ==========================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -30,7 +30,7 @@ def get_worksheet(sheet_name):
     return sh.worksheet(sheet_name)
 
 # ------------------- READ SHEET (cached) -------------------
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=60)  # cache lebih pendek supaya lebih cepat update
 def read_sheet_once(sheet_name):
     ws = get_worksheet(sheet_name)
     df = pd.DataFrame(ws.get_all_records())
@@ -103,14 +103,6 @@ Terima Kasih,
     if no_hp_clean.isdigit() and len(no_hp_clean) >= 10:
         wa_link = f"https://wa.me/{no_hp_clean}?text={urllib.parse.quote(msg)}"
         st.markdown(f"[📲 Kirim Konfirmasi Ambil]({wa_link})", unsafe_allow_html=True)
-        js = f"""
-        <script>
-            setTimeout(function(){{
-                window.open("{wa_link}", "_blank");
-            }}, 500);
-        </script>
-        """
-        st.markdown(js, unsafe_allow_html=True)
     else:
         st.warning("⚠️ Nomor HP pelanggan tidak valid.")
 
@@ -137,7 +129,8 @@ def prepare_df_for_view(df):
     for col in ["Tanggal Masuk","No Nota","Nama Pelanggan","No HP","Jenis Pakaian","Jenis Layanan","Total","Status"]:
         if col not in df.columns:
             df[col] = ""
-    df["Tanggal_parsed"] = pd.to_datetime(df["Tanggal Masuk"], errors="coerce", dayfirst=True)
+    # parsing tanggal otomatis, ambil 10 karakter pertama (dd/mm/yyyy)
+    df["Tanggal_parsed"] = pd.to_datetime(df["Tanggal Masuk"].astype(str).str[:10], errors="coerce", dayfirst=True)
     df["Status"] = df["Status"].fillna("").astype(str).str.strip()
     return df
 
@@ -262,4 +255,4 @@ def show():
         show_tab(df[df["Status"].str.lower() == "batal"], "Batal")
 
 if __name__ == "__main__":
-    show()
+    show
