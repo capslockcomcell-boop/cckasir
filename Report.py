@@ -28,33 +28,36 @@ def authenticate_google():
 def get_worksheet(sheet_name):
     client = authenticate_google()
     sh = client.open_by_key(SPREADSHEET_ID)
-    return sh.worksheet(sheet_name)
+    ws = sh.worksheet(sheet_name)
+    return ws
 
 # ------------------- BACA SHEET -------------------
 def read_sheet(sheet_name):
     """
     Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
-    terbaca dengan benar sebagai float.
+    terbaca dengan benar sebagai float menggunakan ValueRenderOption.
     """
     try:
         ws = get_worksheet(sheet_name)
-        df = pd.DataFrame(ws.get_all_records())
+
+        # Ambil semua nilai sesuai tampilan (misal "5,3")
+        records = ws.get_all_records(value_render_option='FORMATTED_VALUE')
+        df = pd.DataFrame(records)
 
         # ✅ Normalisasi kolom angka utama (khusus yang sering pakai koma)
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                # Ubah menjadi string, hapus spasi, ganti koma jadi titik
+                # Ubah jadi string, ganti koma jadi titik
                 df[col] = df[col].astype(str).str.strip().str.replace(",", ".", regex=False)
-                
-                # Hanya ambil angka dan titik pertama saja
-                df[col] = df[col].apply(lambda x: "".join([c for i, c in enumerate(x) if c.isdigit() or (c == "." and i == x.find("."))]))
-                
-                # Kalau kosong, jadi 0
+
+                # Buang karakter non-digit kecuali titik
+                df[col] = df[col].str.replace(r"[^0-9.]", "", regex=True)
+
+                # Jika kosong, set 0
                 df[col] = df[col].apply(lambda x: "0" if x == "" else x)
-                
+
                 # Konversi ke float
                 df[col] = df[col].astype(float)
-
 
         # 🔧 Pastikan kolom string tetap aman
         for col in df.columns:
@@ -66,6 +69,7 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
+
 
 # ------------------- UTIL -------------------
 def load_config():
