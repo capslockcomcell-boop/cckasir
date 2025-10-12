@@ -114,9 +114,14 @@ def show():
 
     admin_harga = get_admin_prices()
     harga_default = admin_harga.get(jenis_layanan, 0)
-    harga_per_kg = st.number_input("Harga per Kg", min_value=0.0, step=500.0, format="%.0f")  # tanpa ,00
+    harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, step=500.0, format="%.0f")  # tanpa ,00
 
-    berat = st.number_input("Berat (Kg)", min_value=0.0, step=0.01, format="%.2f")
+    # Input berat dengan kolom Kg + Gram
+    st.subheader("Berat Pakaian")
+    kg = st.number_input("Kg", min_value=0, step=1)
+    gram = st.number_input("Gram", min_value=0, max_value=999, step=50)
+    berat = kg + gram / 1000
+    st.markdown(f"**Berat total:** {berat:.2f} Kg")
 
     parfum_list = ["Sakura", "Gardenia", "Lily", "Jasmine", "Violet", "Lavender", "Ocean Fresh", "Snappy", "Sweet Poppy", "Aqua Fresh"]
     parfum_pilihan = st.selectbox("Pilih Parfum", parfum_list)
