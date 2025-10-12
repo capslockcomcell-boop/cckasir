@@ -10,7 +10,7 @@ import requests
 import urllib.parse
 
 # ============ KONFIGURASI ============
-SPREADSHEET_ID = "GANTI_DENGAN_ID_SHEET_ANDA"
+SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
 SHEET_ORDER = "Order"
 SHEET_ADMIN = "Admin"
 CONFIG_FILE = "config.json"
