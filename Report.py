@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.3 - FIX DESIMAL KOMAS 100%) =====================
+# ===================== REPORT.PY (Laundry v1.4 - FIX DESIMAL KOMAS & BERAT) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -34,11 +34,11 @@ def get_worksheet(sheet_name):
 def read_sheet(sheet_name):
     """
     Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
-    terbaca dengan benar sebagai float.
+    serta memaksa format berat (53 → 5,3)
     """
     try:
         ws = get_worksheet(sheet_name)
-        all_values = ws.get_all_values()  # ambil semua sel persis
+        all_values = ws.get_all_values()
         if not all_values:
             return pd.DataFrame()
         
@@ -61,6 +61,10 @@ def read_sheet(sheet_name):
                 # Convert ke float
                 df[col] = df[col].astype(float)
 
+        # ----------------- PAKSA BERAT -----------------
+        if "Berat (Kg)" in df.columns:
+            df["Berat (Kg)"] = df["Berat (Kg)"].apply(lambda x: x/10 if x >= 10 else x)
+
         # Pastikan kolom string tetap aman
         for col in df.columns:
             if df[col].dtype == object:
@@ -71,7 +75,6 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
-
 
 
 # ------------------- UTIL -------------------
