@@ -1,4 +1,4 @@
-# ===================== ORDER.PY (Laundry v1.0) =====================
+# ===================== ORDER.PY (Laundry v1.1) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -45,13 +45,19 @@ def load_config():
 # ============ WIB TANGGAL ============
 @st.cache_data(ttl=300)
 def get_cached_internet_datetime():
+    """
+    Mengambil waktu sekarang dari internet (Asia/Jakarta).
+    Jika gagal, fallback ke waktu lokal server.
+    """
     try:
         res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Jakarta", timeout=5)
         if res.status_code == 200:
             data = res.json()
+            # API returns ISO datetime with offset; normalize for fromisoformat
             dt = datetime.datetime.fromisoformat(data["datetime"].replace("Z", "+00:00"))
             return dt
-    except:
+    except Exception:
+        # silent fail, gunakan lokal
         pass
     return datetime.datetime.now()
 
@@ -79,17 +85,27 @@ def get_next_nota_from_sheet(sheet_name, prefix):
 # ============ HARGA LAYANAN ============
 @st.cache_data(ttl=120)
 def get_admin_prices():
+    """
+    Kembalikan dict: { "Jenis Layanan": Harga per Kg, ... }
+    Sumber: Sheet "Admin"
+    """
     ws = get_worksheet(SHEET_ADMIN)
     df = pd.DataFrame(ws.get_all_records())
+    # hati-hati jika sheet kosong
+    if df.empty:
+        return {}
+    # pastikan kolom sesuai
+    if "Jenis Layanan" not in df.columns or "Harga per Kg" not in df.columns:
+        return {}
     harga_dict = {row["Jenis Layanan"]: row["Harga per Kg"] for _, row in df.iterrows()}
     return harga_dict
 
 # ============ SIMPAN ORDER ============
-# ===================== ORDER.PY (Laundry v1.1) =====================
-# ... (kode import dan konfigurasi tetap sama) ...
-
-# ============ SIMPAN ORDER ============
 def append_to_sheet(sheet_name, data: dict):
+    """
+    Menambahkan baris ke sheet sesuai urutan header yang ada.
+    Jika kolom 'Status Antrian' belum ada, akan ditambahkan.
+    """
     ws = get_worksheet(sheet_name)
     headers = ws.row_values(1)
 
@@ -98,9 +114,10 @@ def append_to_sheet(sheet_name, data: dict):
         ws.update_cell(1, len(headers) + 1, "Status Antrian")
         headers.append("Status Antrian")
 
-    # Set default Status Antrian jadi "Antrian"
-    data["Status Antrian"] = "Antrian"
+    # Set default Status Antrian jadi "Antrian" jika belum ada
+    data.setdefault("Status Antrian", "Antrian")
 
+    # Susun row berdasarkan headers (kolom kosong bila key tidak ada)
     row = [data.get(h, "") for h in headers]
     ws.append_row(row, value_input_option="USER_ENTERED")
 
@@ -109,10 +126,15 @@ def show():
     cfg = load_config()
     st.title("🧺 Transaksi Laundry")
 
+    # Ambil waktu terkini (cached)
     now = get_cached_internet_datetime()
+
+    # Tanggal input masih ada, tapi jam dihilangkan dari form.
     tanggal_masuk = st.date_input("Tanggal Masuk", value=now.date())
     estimasi_selesai = st.date_input("Estimasi Selesai", value=(now + datetime.timedelta(days=3)).date())
-    jam = st.time_input("Jam Masuk", value=now.time())
+
+    # Jam otomatis (di background) diambil dari `now`
+    jam_otomatis = now.strftime("%H:%M")
 
     nama = st.text_input("Nama Pelanggan")
     no_hp = st.text_input("Nomor WhatsApp")
@@ -149,13 +171,17 @@ def show():
     st.markdown(f"### 💰 Total: Rp {total:,.0f}".replace(",", "."))
 
     if st.button("💾 Simpan Transaksi"):
+        # Validasi
         if not nama or not no_hp or berat <= 0 or harga_per_kg <= 0:
             st.error("⚠️ Nama, No HP, berat, dan harga harus diisi.")
             return
 
+        # Nomor nota
         nota = get_next_nota_from_sheet(SHEET_ORDER, "TRX/")
-        tanggal_masuk_str = f"{tanggal_masuk.strftime('%d/%m/%Y')} - {jam.strftime('%H:%M')}"
-        estimasi_selesai_str = f"{estimasi_selesai.strftime('%d/%m/%Y')} - {jam.strftime('%H:%M')}"
+
+        # Gunakan jam otomatis di sini
+        tanggal_masuk_str = f"{tanggal_masuk.strftime('%d/%m/%Y')} - {jam_otomatis}"
+        estimasi_selesai_str = f"{estimasi_selesai.strftime('%d/%m/%Y')} - {jam_otomatis}"
 
         order_data = {
             "No Nota": nota,
@@ -208,9 +234,12 @@ Total    = Rp {total:,.0f}
 =======================
 Terima kasih 🙏
 """
+        # Normalisasi nomor HP untuk format wa.me (62...)
         hp = str(no_hp).replace("+", "").replace(" ", "").replace("-", "")
-        if hp.startswith("0"): hp = "62" + hp[1:]
-        elif not hp.startswith("62"): hp = "62" + hp
+        if hp.startswith("0"):
+            hp = "62" + hp[1:]
+        elif not hp.startswith("62"):
+            hp = "62" + hp
         wa_link = f"https://wa.me/{hp}?text={requests.utils.quote(msg)}"
         st.markdown(f"[📲 KIRIM NOTA VIA WHATSAPP]({wa_link})", unsafe_allow_html=True)
 
