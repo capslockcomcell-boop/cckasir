@@ -114,7 +114,7 @@ def show():
 
     admin_harga = get_admin_prices()
     harga_default = admin_harga.get(jenis_layanan, 0)
-    harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, step=500.0)
+    harga_per_kg = st.number_input("Harga per Kg", min_value=0.0, step=500.0, format="%.0f")  # tanpa ,00
 
     berat = st.number_input("Berat (Kg)", min_value=0.0, step=0.01, format="%.2f")
 
