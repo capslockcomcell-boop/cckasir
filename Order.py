@@ -85,9 +85,22 @@ def get_admin_prices():
     return harga_dict
 
 # ============ SIMPAN ORDER ============
+# ===================== ORDER.PY (Laundry v1.1) =====================
+# ... (kode import dan konfigurasi tetap sama) ...
+
+# ============ SIMPAN ORDER ============
 def append_to_sheet(sheet_name, data: dict):
     ws = get_worksheet(sheet_name)
     headers = ws.row_values(1)
+
+    # Pastikan kolom Status Antrian ada
+    if "Status Antrian" not in headers:
+        ws.update_cell(1, len(headers) + 1, "Status Antrian")
+        headers.append("Status Antrian")
+
+    # Set default Status Antrian jadi "Antrian"
+    data["Status Antrian"] = "Antrian"
+
     row = [data.get(h, "") for h in headers]
     ws.append_row(row, value_input_option="USER_ENTERED")
 
@@ -114,9 +127,8 @@ def show():
 
     admin_harga = get_admin_prices()
     harga_default = admin_harga.get(jenis_layanan, 0)
-    harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, step=500.0, format="%.0f")  # tanpa ,00
+    harga_per_kg = st.number_input("Harga per Kg", value=float(harga_default), min_value=0.0, step=500.0, format="%.0f")
 
-    # Input berat dengan kolom Kg + Gram
     st.subheader("Berat Pakaian")
     kg = st.number_input("Kg", min_value=0, step=1)
     gram = st.number_input("Gram", min_value=0, max_value=999, step=50)
@@ -162,6 +174,7 @@ def show():
             "Jenis Transaksi": jenis_transaksi,
             "Status": status,
             "Uploaded": True
+            # "Status Antrian" otomatis ditambahkan di append_to_sheet()
         }
 
         try:
@@ -173,15 +186,12 @@ def show():
 
         # === Nota WA ===
         msg = f"""NOTA ELEKTRONIK
-
 {cfg['nama_toko']}
 {cfg['alamat']}
 HP : {cfg['telepon']}
-
 =======================
 No Nota : {nota}
 Pelanggan : {nama}
-
 Tanggal Masuk    : {tanggal_masuk_str}
 Estimasi Selesai : {estimasi_selesai_str}
 =======================
