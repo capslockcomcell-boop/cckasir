@@ -34,11 +34,12 @@ def get_worksheet(sheet_name):
 def read_sheet(sheet_name):
     """
     Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
-    serta memaksa format berat (53 → 5,3)
+    terbaca dengan benar sebagai float.
+    Untuk kolom 'Berat (Kg)', jika 2 digit tanpa koma, paksa jadi 2.2 misal 22 → 2.2
     """
     try:
         ws = get_worksheet(sheet_name)
-        all_values = ws.get_all_values()
+        all_values = ws.get_all_values()  # ambil semua sel persis
         if not all_values:
             return pd.DataFrame()
         
@@ -46,24 +47,24 @@ def read_sheet(sheet_name):
         data = all_values[1:]
         df = pd.DataFrame(data, columns=header)
 
+        def normalize_angka(x, is_berat=False):
+            s = str(x).strip().replace(",", ".")
+            # buang karakter non-digit kecuali titik
+            s = "".join([c for c in s if c.isdigit() or c == "."])
+            if s == "":
+                return 0.0
+            f = float(s)
+            if is_berat:
+                # paksa koma jika dua digit tanpa titik
+                if f >= 10 and f < 100 and "." not in s:
+                    f = f / 10
+            return f
+
         # Normalisasi kolom angka
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                # Hapus spasi & ganti koma jadi titik
-                df[col] = df[col].astype(str).str.strip().str.replace(",", ".", regex=False)
-
-                # Buang karakter non-digit kecuali titik
-                df[col] = df[col].str.replace(r"[^0-9.]", "", regex=True)
-
-                # Jika kosong, set 0
-                df[col] = df[col].apply(lambda x: "0" if x == "" else x)
-
-                # Convert ke float
-                df[col] = df[col].astype(float)
-
-        # ----------------- PAKSA BERAT -----------------
-        if "Berat (Kg)" in df.columns:
-            df["Berat (Kg)"] = df["Berat (Kg)"].apply(lambda x: x/10 if x >= 10 else x)
+                is_berat = col == "Berat (Kg)"
+                df[col] = df[col].apply(lambda x: normalize_angka(x, is_berat=is_berat))
 
         # Pastikan kolom string tetap aman
         for col in df.columns:
@@ -75,6 +76,7 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
+
 
 
 # ------------------- UTIL -------------------
