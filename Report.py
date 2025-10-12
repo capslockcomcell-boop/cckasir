@@ -38,6 +38,17 @@ def read_sheet(sheet_name):
         ws = get_worksheet(sheet_name)
         df = pd.DataFrame(ws.get_all_records())
 
+        # ✅ Ubah koma desimal jadi titik di kolom angka (khusus Berat & Harga)
+        for col in ["Berat (Kg)", "Harga"]:
+            if col in df.columns:
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.replace(",", ".", regex=False)
+                    .str.replace(" ", "", regex=False)
+                )
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
         # --- Normalisasi nilai numerik berformat lokal (koma desimal) ---
         for col in df.columns:
             if df[col].dtype == object:
