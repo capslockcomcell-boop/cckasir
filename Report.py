@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.1 - FIX DESIMAL KOMAS) =====================
+# ===================== REPORT.PY (Laundry v1.2 - FIX DESIMAL KOMAS 100%) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -32,28 +32,32 @@ def get_worksheet(sheet_name):
 
 def read_sheet(sheet_name):
     """
-    Membaca sheet Google dan membersihkan angka yang memakai koma (misal 5,6 → 5.6).
+    Membaca sheet Google dan memastikan angka desimal dengan koma (misal 5,6 → 5.6)
+    terbaca dengan benar sebagai float.
     """
     try:
         ws = get_worksheet(sheet_name)
         df = pd.DataFrame(ws.get_all_records())
 
-        # ✅ Ubah koma desimal jadi titik di kolom angka (khusus Berat & Harga)
-        for col in ["Berat (Kg)", "Harga"]:
-            if col in df.columns:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", ".", regex=False)
-                    .str.replace(" ", "", regex=False)
-                )
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        if df.empty:
+            return df
 
-        # --- Normalisasi nilai numerik berformat lokal (koma desimal) ---
+        # 🔧 Normalisasi angka koma (termasuk berat, harga, subtotal, total, dll)
+        numeric_cols = [c for c in df.columns if any(x in c.lower() for x in ["berat", "harga", "total", "subtotal", "diskon", "nominal"])]
+        for col in numeric_cols:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(",", ".", regex=False)
+                .str.replace(" ", "", regex=False)
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        # 🔧 Normalisasi koma di semua kolom bertipe string
         for col in df.columns:
             if df[col].dtype == object:
-                # Ganti koma ke titik hanya jika kolom terlihat seperti angka
                 df[col] = df[col].astype(str).str.replace(",", ".", regex=False)
+
         return df
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
@@ -116,9 +120,10 @@ def show():
 
     # ------------------- PARSE PENGELUARAN -------------------
     if not df_pengeluaran.empty:
-        df_pengeluaran["Tanggal"] = pd.to_datetime(
-            df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
-        ).dt.date
+        if "Tanggal" in df_pengeluaran.columns:
+            df_pengeluaran["Tanggal"] = pd.to_datetime(
+                df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
+            ).dt.date
         if "Nominal" in df_pengeluaran.columns:
             df_pengeluaran["Nominal"] = pd.to_numeric(df_pengeluaran["Nominal"], errors="coerce").fillna(0)
 
