@@ -8,6 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 import requests
 import urllib.parse
+from Setting import load_config
 
 # ============ KONFIGURASI ============
 SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
@@ -31,16 +32,6 @@ def get_worksheet(sheet_name):
     sh = client.open_by_key(SPREADSHEET_ID)
     return sh.worksheet(sheet_name)
 
-# ============ CONFIG TOKO ============
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {
-        "nama_toko": "TR Laundry",
-        "alamat": "Jl.Buluh Cina, Panam",
-        "telepon": "087899913595"
-    }
 
 # ============ WIB TANGGAL ============
 @st.cache_data(ttl=300)
