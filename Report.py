@@ -7,7 +7,7 @@ import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import requests
-from Setting import load_config
+from Setting import load_config as load_setting_config
 # ------------------- CONFIG -------------------
 CONFIG_FILE = "config.json"
 SPREADSHEET_ID = "1v_3sXsGw9lNmGPSbIHytYzHzPTxa4yp4HhfS9tgXweA"
