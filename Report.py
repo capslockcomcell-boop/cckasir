@@ -43,14 +43,18 @@ def read_sheet(sheet_name):
         # ✅ Normalisasi kolom angka utama (khusus yang sering pakai koma)
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                df[col] = (
-                    df[col]
-                    .astype(str)
-                    .str.replace(",", ".", regex=False)
-                    .str.replace(" ", "", regex=False)
-                    .str.replace("[^0-9.]", "", regex=True)
-                )
+                # Ganti koma jadi titik & buang spasi
+                df[col] = df[col].astype(str).str.replace(",", ".", regex=False).str.strip()
+        
+                # Buang karakter non-numerik (kecuali titik dan angka)
+                df[col] = df[col].str.replace(r"[^0-9.]", "", regex=True)
+        
+                # Kalau hasilnya kosong, set jadi 0
+                df[col] = df[col].apply(lambda x: "0" if x == "" else x)
+        
+                # Konversi ke float
                 df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
 
         # 🔧 Pastikan kolom string tetap aman
         for col in df.columns:
