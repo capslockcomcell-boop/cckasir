@@ -2,7 +2,6 @@ streamlit
 streamlit-folium
 streamlit-option-menu
 reportlab
-pillow
 openpyxl  
 pandas    
 lxml
@@ -18,3 +17,6 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 pyproj
+python-escpos
+pyserial
+Pillow
