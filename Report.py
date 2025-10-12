@@ -1,4 +1,4 @@
-# ===================== REPORT.PY (Laundry v1.4 - FIX DESIMAL KOMAS & BERAT) =====================
+# ===================== REPORT.PY (Laundry v1.5 - FIX BERAT & DESIMAL) =====================
 import streamlit as st
 import pandas as pd
 import datetime
@@ -47,24 +47,39 @@ def read_sheet(sheet_name):
         data = all_values[1:]
         df = pd.DataFrame(data, columns=header)
 
-        def normalize_angka(x, is_berat=False):
-            s = str(x).strip().replace(",", ".")
-            # buang karakter non-digit kecuali titik
+        # ------------------- NORMALISASI -------------------
+        def normalize_berat(x):
+            """
+            Memaksa format Berat (Kg) menjadi float:
+            - Jika input string ada koma: 5,3 -> 5.3
+            - Jika dua digit tanpa koma: 53 -> 5.3
+            - Jika satu digit: tetap 5 -> 5.0
+            """
+            s = str(x).strip()
+            s = s.replace(",", ".")
             s = "".join([c for c in s if c.isdigit() or c == "."])
             if s == "":
                 return 0.0
+            if "." in s:
+                return float(s)
             f = float(s)
-            if is_berat:
-                # paksa koma jika dua digit tanpa titik
-                if f >= 10 and f < 100 and "." not in s:
-                    f = f / 10
+            if f >= 10 and f < 100:
+                f = f / 10
             return f
 
-        # Normalisasi kolom angka
+        def normalize_general(x):
+            s = str(x).strip().replace(",", ".")
+            s = "".join([c for c in s if c.isdigit() or c == "."])
+            if s == "":
+                return 0.0
+            return float(s)
+
         for col in ["Berat (Kg)", "Harga", "Total", "Subtotal", "Diskon", "Nominal", "Harga per Kg"]:
             if col in df.columns:
-                is_berat = col == "Berat (Kg)"
-                df[col] = df[col].apply(lambda x: normalize_angka(x, is_berat=is_berat))
+                if col == "Berat (Kg)":
+                    df[col] = df[col].apply(normalize_berat)
+                else:
+                    df[col] = df[col].apply(normalize_general)
 
         # Pastikan kolom string tetap aman
         for col in df.columns:
@@ -76,7 +91,6 @@ def read_sheet(sheet_name):
     except Exception as e:
         st.warning(f"Gagal membaca sheet {sheet_name}: {e}")
         return pd.DataFrame()
-
 
 
 # ------------------- UTIL -------------------
@@ -108,6 +122,7 @@ def get_internet_date():
         pass
     return datetime.date.today()
 
+
 # ------------------- MAIN -------------------
 def show():
     cfg = load_config()
@@ -122,18 +137,13 @@ def show():
         return
 
     # ------------------- PARSE ORDER -------------------
-    if not df_order.empty:
-        if "Tanggal Masuk" in df_order.columns:
-            df_order["Tanggal Parsed"] = df_order["Tanggal Masuk"].str.split(" - ").str[0]
-            df_order["Tanggal Parsed"] = pd.to_datetime(
-                df_order["Tanggal Parsed"], dayfirst=True, errors="coerce"
-            ).dt.date
+    if not df_order.empty and "Tanggal Masuk" in df_order.columns:
+        df_order["Tanggal Parsed"] = df_order["Tanggal Masuk"].str.split(" - ").str[0]
+        df_order["Tanggal Parsed"] = pd.to_datetime(df_order["Tanggal Parsed"], dayfirst=True, errors="coerce").dt.date
 
     # ------------------- PARSE PENGELUARAN -------------------
     if not df_pengeluaran.empty and "Tanggal" in df_pengeluaran.columns:
-        df_pengeluaran["Tanggal"] = pd.to_datetime(
-            df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce"
-        ).dt.date
+        df_pengeluaran["Tanggal"] = pd.to_datetime(df_pengeluaran["Tanggal"], dayfirst=True, errors="coerce").dt.date
 
     # ------------------- FILTER -------------------
     st.sidebar.header("📅 Filter Data")
@@ -146,7 +156,6 @@ def show():
     else:
         bulan_list = sorted(set(df_order["Tanggal Parsed"].dropna().map(lambda d: d.strftime("%Y-%m"))) if not df_order.empty else [])
         pilih_bulan = st.sidebar.selectbox("Pilih Bulan", ["Semua Bulan"] + bulan_list, index=0)
-
         if pilih_bulan == "Semua Bulan":
             df_order_f, df_pengeluaran_f = df_order.copy(), df_pengeluaran.copy()
         else:
@@ -215,6 +224,7 @@ def show():
     if not df_order_f.empty:
         csv = df_order_f.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Download Laporan Laundry (CSV)", csv, "laporan_laundry.csv", "text/csv")
+
 
 # ------------------- MAIN -------------------
 if __name__ == "__main__":
